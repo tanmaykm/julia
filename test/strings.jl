@@ -220,6 +220,33 @@ parsehex(s) = parseint(s,16)
 @test_throws ErrorException parseint("2x")
 @test_throws ErrorException parseint("-")
 
+for s in ["   2 \n 0", "2x", "-"]
+    @test_throws ErrorException parseint(s)
+    ex = Base.ExceptionReturn()
+    Base.parseint_internal(Int, s, 10, ex)
+    @test Base.haserror(ex)
+end
+
+for s in ["1234", "-1232323231", "+95858747737"]
+    ex = Base.ExceptionReturn()
+    Base.parseint_internal(Int, s, 10, ex)
+    @test !Base.haserror(ex)
+end
+
+for s in ["+-123.23", "334,22", "sdfu"]
+    @test_throws ArgumentError parsefloat(Float64, s)
+    ex = Base.ExceptionReturn()
+    Base.parsefloat_internal(Float64, s, ex)
+    @test Base.haserror(ex)
+end
+
+for s in ["+-123.23", "334,22", "sdfu"]
+    @test_throws ArgumentError parsefloat(Float32, s)
+    ex = Base.ExceptionReturn()
+    Base.parsefloat_internal(Float32, s, ex)
+    @test Base.haserror(ex)
+end
+
 @test parseint("1234") == 1234
 @test parseint("0x1234") == 0x1234
 @test parseint("0o1234") == 0o1234

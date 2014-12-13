@@ -54,3 +54,24 @@ macro assert(ex,msgs...)
     end
     :($(esc(ex)) ? $(nothing) : error($msg))
 end
+
+type ExceptionReturn
+    isset::Bool
+    ex::Exception
+    ExceptionReturn() = new(false)
+end
+
+typealias OptionalExceptionReturn Union(Void, ExceptionReturn)
+
+seterror(err::Void, ex::Exception) = throw(ex)
+function seterror(err::ExceptionReturn, ex::Exception)
+    err.ex = ex
+    err.isset = true
+    nothing
+end
+
+reseterror(err::Void) = false
+reseterror(err::ExceptionReturn) = (isset = err.isset; err.isset = false; isset)
+
+haserror(err::Void) = false
+haserror(err::ExceptionReturn) = err.isset

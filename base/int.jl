@@ -467,7 +467,7 @@ for T in (Int8,Int16,Int32,Int64)#,Int128) ## FIXME: #4905
 end
 for T in (Int16,Int32)
     @eval begin
-        checked_mul(x::$T, y::$T) = box($T,checked_smul(unbox($T,x),unbox($T,y)))
+        checked_mul(x::$T, y::$T, err::OptionalExceptionReturn=nothing) = box($T,checked_smul(unbox($T,x),unbox($T,y)))
     end
 end
 for T in (UInt8,UInt16,UInt32,UInt64)#,UInt128) ## FIXME: #4905
@@ -478,39 +478,39 @@ for T in (UInt8,UInt16,UInt32,UInt64)#,UInt128) ## FIXME: #4905
 end
 for T in (UInt16,UInt32)
     @eval begin
-        checked_mul(x::$T, y::$T) = box($T,checked_umul(unbox($T,x),unbox($T,y)))
+        checked_mul(x::$T, y::$T, err::OptionalExceptionReturn=nothing) = box($T,checked_umul(unbox($T,x),unbox($T,y)))
     end
 end
 
 # checked mul is broken for 8-bit types (LLVM bug?) ## FIXME: #4905
 
 for T in (Int8,UInt8)
-    @eval function checked_mul(x::$T, y::$T)
+    @eval function checked_mul(x::$T, y::$T, err::OptionalExceptionReturn=nothing)
         xy = widemul(x,y)
-        (typemin($T) <= xy <= typemax($T)) || throw(OverflowError())
+        (typemin($T) <= xy <= typemax($T)) || seterror(err, OverflowError())
         return xy % $T
     end
 end
 
 if WORD_SIZE == 32
 for T in (Int64,UInt64)
-    @eval function checked_mul(x::$T, y::$T)
+    @eval function checked_mul(x::$T, y::$T, err::OptionalExceptionReturn=nothing)
         xy = int128(x)*int128(y)
-        (typemin($T) <= xy <= typemax($T)) || throw(OverflowError())
+        (typemin($T) <= xy <= typemax($T)) || seterror(err, OverflowError())
         return xy % $T
     end
 end
 else
-    checked_mul(x::Int64, y::Int64)   = box(Int64,checked_smul(unbox(Int64,x),unbox(Int64,y)))
-    checked_mul(x::UInt64, y::UInt64) = box(UInt64,checked_umul(unbox(UInt64,x),unbox(UInt64,y)))
+    checked_mul(x::Int64, y::Int64, err::OptionalExceptionReturn=nothing)   = box(Int64,checked_smul(unbox(Int64,x),unbox(Int64,y)))
+    checked_mul(x::UInt64, y::UInt64, err::OptionalExceptionReturn=nothing) = box(UInt64,checked_umul(unbox(UInt64,x),unbox(UInt64,y)))
 end
 
 # checked ops are broken for 128-bit types (LLVM bug) ## FIXME: #4905
 
 checked_add(x::Int128, y::Int128) = x + y
 checked_sub(x::Int128, y::Int128) = x - y
-checked_mul(x::Int128, y::Int128) = x * y
+checked_mul(x::Int128, y::Int128, err::OptionalExceptionReturn=nothing) = x * y
 
 checked_add(x::UInt128, y::UInt128) = x + y
 checked_sub(x::UInt128, y::UInt128) = x - y
-checked_mul(x::UInt128, y::UInt128) = x * y
+checked_mul(x::UInt128, y::UInt128, err::OptionalExceptionReturn=nothing) = x * y

@@ -1492,34 +1492,40 @@ end
 parseint{T<:Integer}(::Type{T}, c::Char, base::Integer) = convert(T,parseint(c,base))
 parseint{T<:Integer}(::Type{T}, c::Char) = convert(T,parseint(c))
 
-function parseint_next(s::AbstractString, i::Int=start(s))
-    done(s,i) && error("premature end of integer: $(repr(s))")
+function parseint_next(s::AbstractString, i::Int, err::OptionalExceptionReturn)
+    done(s,i) && (seterror(err,ErrorException("premature end of integer: $(repr(s))")); return (Char(0),0,0))
     j = i
     c, i = next(s,i)
     c, i, j
 end
 
-function parseint_preamble(signed::Bool, s::AbstractString, base::Int)
-    c, i, j = parseint_next(s)
+function parseint_preamble(signed::Bool, s::AbstractString, base::Int, err::OptionalExceptionReturn)
+    c, i, j = parseint_next(s, start(s), err)
+    haserror(err) && (return (0,0,0))
+
     while isspace(c)
-        c, i, j = parseint_next(s,i)
+        c, i, j = parseint_next(s,i,err)
+        haserror(err) && (return (0,0,0))
     end
     sgn = 1
     if signed
         if c == '-' || c == '+'
             (c == '-') && (sgn = -1)
-            c, i, j = parseint_next(s,i)
+            c, i, j = parseint_next(s,i,err)
+            haserror(err) && (return (0,0,0))
         end
     end
     while isspace(c)
-        c, i, j = parseint_next(s,i)
+        c, i, j = parseint_next(s,i,err)
+        haserror(err) && (return (0,0,0))
     end
     if base == 0
         if c == '0' && !done(s,i)
             c, i = next(s,i)
             base = c=='b' ? 2 : c=='o' ? 8 : c=='x' ? 16 : 10
             if base != 10
-                c, i, j = parseint_next(s,i)
+                c, i, j = parseint_next(s,i,err)
+                haserror(err) && (return (0,0,0))
             end
         else
             base = 10
@@ -1528,18 +1534,20 @@ function parseint_preamble(signed::Bool, s::AbstractString, base::Int)
     return sgn, base, j
 end
 
-function parseint_nocheck{T<:Integer}(::Type{T}, s::AbstractString, base::Int, a::Int)
-    sgn, base, i = parseint_preamble(T<:Signed,s,base)
-    c, i = parseint_next(s,i)
+function parseint_internal{T<:Integer}(::Type{T}, s::AbstractString, base::Int, a::Int, err::OptionalExceptionReturn=nothing)
+    n::T = 0
+    sgn, base, i = parseint_preamble(T<:Signed,s,base,err)
+    haserror(err) && (return n)
+    c, i = parseint_next(s,i,err)
+    haserror(err) && (return n)
     base = convert(T,base)
     ## FIXME: remove 128-bit specific code once 128-bit div doesn't rely on BigInt
     m::T = T===UInt128 || T===Int128 ? typemax(T) : div(typemax(T)-base+1,base)
-    n::T = 0
     while n <= m
         d::T = '0' <= c <= '9' ? c-'0'    :
                'A' <= c <= 'Z' ? c-'A'+10 :
                'a' <= c <= 'z' ? c-'a'+a  : base
-        d < base || error("invalid base $base digit $(repr(c)) in $(repr(s))")
+        d < base || (seterror(err,ErrorException("invalid base $base digit $(repr(c)) in $(repr(s))")); return n)
         n *= base
         n += d
         if done(s,i)
@@ -1554,27 +1562,28 @@ function parseint_nocheck{T<:Integer}(::Type{T}, s::AbstractString, base::Int, a
         d::T = '0' <= c <= '9' ? c-'0'    :
                'A' <= c <= 'Z' ? c-'A'+10 :
                'a' <= c <= 'z' ? c-'a'+a  : base
-        d < base || error("invalid base $base digit $(repr(c)) in $(repr(s))")
+        d < base || (seterror(err,ErrorException("invalid base $base digit $(repr(c)) in $(repr(s))")); return n)
         (T <: Signed) && (d *= sgn)
-        n = checked_mul(n,base)
+        n = checked_mul(n,base,err)
+        haserror(err) && (return n)
         n = checked_add(n,d)
         done(s,i) && return n
         c, i = next(s,i)
     end
     while !done(s,i)
         c, i = next(s,i)
-        isspace(c) || error("extra characters after whitespace in $(repr(s))")
+        isspace(c) || (seterror(err,ErrorException("extra characters after whitespace in $(repr(s))")); return n)
     end
     return n
 end
-parseint_nocheck{T<:Integer}(::Type{T}, s::AbstractString, base::Int) =
-    parseint_nocheck(T, s, base, base <= 36 ? 10 : 36)
+parseint_internal{T<:Integer}(::Type{T}, s::AbstractString, base::Int, err::OptionalExceptionReturn=nothing) =
+    parseint_internal(T, s, base, base <= 36 ? 10 : 36, err)
 
 parseint{T<:Integer}(::Type{T}, s::AbstractString, base::Integer) =
-    2 <= base <= 62 ? parseint_nocheck(T,s,int(base)) : error("invalid base: $base")
-parseint{T<:Integer}(::Type{T}, s::AbstractString) = parseint_nocheck(T,s,0)
+    2 <= base <= 62 ? parseint_internal(T,s,int(base)) : error("invalid base: $base")
+parseint{T<:Integer}(::Type{T}, s::AbstractString) = parseint_internal(T,s,0)
 parseint(s::AbstractString, base::Integer) = parseint(Int,s,base)
-parseint(s::AbstractString) = parseint_nocheck(Int,s,0)
+parseint(s::AbstractString) = parseint_internal(Int,s,0)
 
 integer (s::AbstractString) = int(s)
 unsigned(s::AbstractString) = uint(s)
@@ -1611,25 +1620,30 @@ begin
     local tmp::Array{Float64,1} = Array(Float64,1)
     local tmpf::Array{Float32,1} = Array(Float32,1)
     global float64, float32
-    function float64(s::AbstractString)
+    function float64_internal(s::AbstractString, err::OptionalExceptionReturn=nothing)
         if !float64_isvalid(s, tmp)
-            throw(ArgumentError("float64(AbstractString): invalid number format"))
+            seterror(err,ArgumentError("float64(AbstractString): invalid number format"))
         end
         return tmp[1]
     end
 
-    function float32(s::AbstractString)
+    function float32_internal(s::AbstractString, err::OptionalExceptionReturn=nothing)
         if !float32_isvalid(s, tmpf)
-            throw(ArgumentError("float32(AbstractString): invalid number format"))
+            seterror(err,ArgumentError("float32(AbstractString): invalid number format"))
         end
         return tmpf[1]
     end
+
+    float64(s::AbstractString) = float64_internal(s)
+    float32(s::AbstractString) = float32_internal(s)
 end
 
 float(x::AbstractString) = float64(x)
 parsefloat(x::AbstractString) = float64(x)
 parsefloat(::Type{Float64}, x::AbstractString) = float64(x)
 parsefloat(::Type{Float32}, x::AbstractString) = float32(x)
+parsefloat_internal(::Type{Float64}, x::AbstractString, err::OptionalExceptionReturn=nothing) = float64_internal(x, err)
+parsefloat_internal(::Type{Float32}, x::AbstractString, err::OptionalExceptionReturn=nothing) = float32_internal(x, err)
 
 for conv in (:float, :float32, :float64,
              :int, :int8, :int16, :int32, :int64,

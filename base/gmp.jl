@@ -74,14 +74,15 @@ widen(::Type{BigInt})  = BigInt
 BigInt(x::BigInt) = x
 BigInt(s::AbstractString) = parseint(BigInt,s)
 
-function Base.parseint_nocheck(::Type{BigInt}, s::AbstractString, base::Int)
+function Base.parseint_internal(::Type{BigInt}, s::AbstractString, base::Int, exc::Base.OptionalExceptionReturn=nothing)
     s = bytestring(s)
-    sgn, base, i = Base.parseint_preamble(true,s,base)
     z = BigInt()
+    sgn, base, i = Base.parseint_preamble(true,s,base,exc)
+    Base.haserror(exc) && return z
     err = ccall((:__gmpz_set_str, :libgmp),
                Int32, (Ptr{BigInt}, Ptr{UInt8}, Int32),
                &z, convert(Ptr{UInt8},SubString(s,i)), base)
-    err == 0 || error("invalid big integer: $(repr(s))")
+    err == 0 || (Base.seterror(exc,ErrorException("invalid big integer: $(repr(s))")); return z)
     return sgn < 0 ? -z : z
 end
 
@@ -207,7 +208,7 @@ function serialize(s, n::BigInt)
     serialize(s, base(62,n))
 end
 
-deserialize(s, ::Type{BigInt}) = Base.parseint_nocheck(BigInt, deserialize(s), 62)
+deserialize(s, ::Type{BigInt}) = Base.parseint_internal(BigInt, deserialize(s), 62)
 
 # Binary ops
 for (fJ, fC) in ((:+, :add), (:-,:sub), (:*, :mul),
@@ -504,6 +505,6 @@ nextpow2(x::BigInt) = x.size < 0 ? -nextpow2(-x) : (x <= 2 ? x : one(BigInt) << 
 
 Base.checked_add(a::BigInt, b::BigInt) = a + b
 Base.checked_sub(a::BigInt, b::BigInt) = a - b
-Base.checked_mul(a::BigInt, b::BigInt) = a * b
+Base.checked_mul(a::BigInt, b::BigInt, err::Base.OptionalExceptionReturn=nothing) = a * b
 
 end # module

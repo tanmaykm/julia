@@ -974,7 +974,7 @@ function fillrows_binary{Tv,Ti}(colptrA::Vector{Ti}, rowvalA::Vector{Ti}, nzvalA
     ptrI::Int = 1 # runs through I
     ptrA::Int = colptrA[col]
     stopA::Int = colptrA[col+1]
-    while ptrI <= nI && ptrA < stopA
+    @boundscheck(!fill, while ptrI <= nI && ptrA < stopA
         rowA = rowvalA[ptrA]
         ptrI = searchsortedfirst(I, rowA, ptrI, nI, Base.Order.Forward)
         (ptrI > nI) && break
@@ -987,7 +987,7 @@ function fillrows_binary{Tv,Ti}(colptrA::Vector{Ti}, rowvalA::Vector{Ti}, nzvalA
             ptrI += 1
         end
         ptrA += 1
-    end
+    end)
     ptrS
 end
 
@@ -996,7 +996,7 @@ function fillrows_linear{Tv,Ti}(colptrA::Vector{Ti}, rowvalA::Vector{Ti}, nzvalA
     ptrI::Int = 1 # runs through I
     ptrA::Int = colptrA[col]
     stopA::Int = colptrA[col+1]
-    while ptrI <= nI && ptrA < stopA
+    @boundscheck(!fill, while ptrI <= nI && ptrA < stopA
         rowA = rowvalA[ptrA]
         rowI = I[ptrI]
 
@@ -1012,7 +1012,7 @@ function fillrows_linear{Tv,Ti}(colptrA::Vector{Ti}, rowvalA::Vector{Ti}, nzvalA
             ptrS += 1
             ptrI += 1
         end
-    end
+    end)
     ptrS
 end
 

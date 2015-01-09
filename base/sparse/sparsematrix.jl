@@ -969,6 +969,53 @@ function getindex{Tv,Ti<:Integer}(A::SparseMatrixCSC{Tv,Ti}, I::Range, J::Abstra
     return SparseMatrixCSC(nI, nJ, colptrS, rowvalS, nzvalS)
 end
 
+function fillrows_binary{Tv,Ti}(colptrA::Vector{Ti}, rowvalA::Vector{Ti}, nzvalA::Vector{Tv}, I::AbstractVector, nI::Int, col::Int, ptrS::Int,
+                                  fill::Bool=false, rowvalS::Vector{Ti}=rowvalA, nzvalS::Vector{Tv}=nzvalA)
+    ptrI::Int = 1 # runs through I
+    ptrA::Int = colptrA[col]
+    stopA::Int = colptrA[col+1]
+    while ptrI <= nI && ptrA < stopA
+        rowA = rowvalA[ptrA]
+        ptrI = searchsortedfirst(I, rowA, ptrI, nI, Base.Order.Forward)
+        (ptrI > nI) && break
+        if I[ptrI] == rowA
+            if fill
+                rowvalS[ptrS] = ptrI
+                nzvalS[ptrS] = nzvalA[ptrA]
+            end
+            ptrS += 1
+            ptrI += 1
+        end
+        ptrA += 1
+    end
+    ptrS
+end
+
+function fillrows_linear{Tv,Ti}(colptrA::Vector{Ti}, rowvalA::Vector{Ti}, nzvalA::Vector{Tv}, I::AbstractVector, nI::Int, col::Int, ptrS::Int,
+                                fill::Bool=false, rowvalS::Vector{Ti}=rowvalA, nzvalS::Vector{Tv}=nzvalA)
+    ptrI::Int = 1 # runs through I
+    ptrA::Int = colptrA[col]
+    stopA::Int = colptrA[col+1]
+    while ptrI <= nI && ptrA < stopA
+        rowA = rowvalA[ptrA]
+        rowI = I[ptrI]
+
+        if rowI > rowA
+            ptrA += 1
+        elseif rowI < rowA
+            ptrI += 1
+        else
+            if fill
+                rowvalS[ptrS] = ptrI
+                nzvalS[ptrS] = nzvalA[ptrA]
+            end
+            ptrS += 1
+            ptrI += 1
+        end
+    end
+    ptrS
+end
+
 function getindex_I_sorted{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, J::AbstractVector)
     # Sorted vectors for indexing rows.
     # Similar to getindex_general but without the transpose trick.
@@ -980,25 +1027,15 @@ function getindex_I_sorted{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, 
     colptrS = Array(Ti, nJ+1)
     colptrS[1] = 1
     nnzS = 0
+    searchlinear = nI < (1000 * nnz(A) / A.n)
 
     # Form the structure of the result and compute space
     for j = 1:nJ
         @inbounds col = J[j]
-        ptrI::Int = 1 # runs through I
-        ptrA::Int = colptrA[col]
-        stopA::Int = colptrA[col+1]
-        while ptrI <= nI && ptrA < stopA
-            rowA = rowvalA[ptrA]
-            rowI = I[ptrI]
-
-            if rowI > rowA
-                ptrA += 1
-            elseif rowI < rowA
-                ptrI += 1
-            else
-                nnzS += 1
-                ptrI += 1
-            end
+        if searchlinear
+            nnzS = @inline fillrows_linear(colptrA, rowvalA, nzvalA, I, nI, col, nnzS)
+        else
+            nnzS = @inline fillrows_binary(colptrA, rowvalA, nzvalA, I, nI, col, nnzS)
         end
         @inbounds colptrS[j+1] = nnzS+1
     end
@@ -1010,24 +1047,10 @@ function getindex_I_sorted{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, 
 
     @inbounds for j = 1:nJ
         col = J[j]
-        ptrI::Int = 1 # runs through I
-        ptrA::Int = colptrA[col]
-        stopA::Int = colptrA[col+1]
-
-        while ptrI <= nI && ptrA < stopA
-            rowA = rowvalA[ptrA]
-            rowI = I[ptrI]
-
-            if rowI > rowA
-                ptrA += 1
-            elseif rowI < rowA
-                ptrI += 1
-            else
-                rowvalS[ptrS] = ptrI
-                nzvalS[ptrS] = nzvalA[ptrA]
-                ptrS += 1
-                ptrI += 1
-            end
+        if searchlinear
+            ptrS = @inline fillrows_linear(colptrA, rowvalA, nzvalA, I, nI, col, ptrS, true, rowvalS, nzvalS)
+        else
+            ptrS = @inline fillrows_binary(colptrA, rowvalA, nzvalA, I, nI, col, ptrS, true, rowvalS, nzvalS)
         end
     end
     return SparseMatrixCSC(nI, nJ, colptrS, rowvalS, nzvalS)

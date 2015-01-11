@@ -1074,6 +1074,7 @@ function getindex_I_sorted{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, 
     minj, maxj = extrema(J)
     ((I[1] < 1) || (I[end] > m) || (minj < 1) || (maxj > n)) && BoundsError()
 
+    cacheI = fill(-1, m)
     @inbounds for j = 1:nJ
         col = J[j]
         ptrI::Int = 1 # runs through I
@@ -1081,7 +1082,13 @@ function getindex_I_sorted{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, 
         stopA::Int = colptrA[col+1]
         while ptrI <= nI && ptrA < stopA
             rowA = rowvalA[ptrA]
-            ptrI = searchsortedfirst(I, rowA, ptrI, nI, Base.Order.Forward)
+            cptrI = cacheI[rowA]
+            if cptrI == -1
+                ptrI = searchsortedfirst(I, rowA, ptrI, nI, Base.Order.Forward)
+                cacheI[rowA] = ptrI
+            else
+                ptrI = cptrI
+            end
             (ptrI > nI) && break
             if I[ptrI] == rowA
                 rowvalS[ptrS] = ptrI

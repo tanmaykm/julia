@@ -125,7 +125,7 @@ select(v::AbstractVector, k::Union(Int,OrdinalRange); kws...) = select!(copy(v),
 
 # index of the first value of vector a that is greater than or equal to x;
 # returns length(v)+1 if x is greater than all values in v.
-function searchsortedfirst(v::AbstractVector, x, lo::Int, hi::Int, o::Ordering)
+@inline function searchsortedfirst(v::AbstractVector, x, lo::Int, hi::Int, o::Ordering)
     lo = lo-1
     hi = hi+1
     @inbounds while lo < hi-1

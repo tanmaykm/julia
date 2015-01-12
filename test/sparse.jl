@@ -499,3 +499,35 @@ a = speye(3,5)
 @test size(rot180(a)) == (3,5)
 @test size(rotr90(a)) == (5,3)
 @test size(rotl90(a)) == (5,3)
+
+let M=2^16, N=2^8
+    Irand = randperm(M);
+    Jrand = randperm(N);
+    SA = [sprand(M, N, d) for d in [1, 0.1, 0.01, 0.001, 0.0001]];
+    IA = [sort(Irand[1:int(n)]) for n in [M, M*0.1, M*0.01, M*0.001, M*0.0001]];
+    println("row sizes: $([int(nnz(S)/S.n) for S in SA])");
+    println("I sizes: $([length(I) for I in IA])");
+
+    J = Jrand;
+    @printf("    S    |    I    | binary S | binary I | linear | best\n")
+    for I in IA
+        for S in SA
+            res = Any[1,2,3]
+            times = Float64[0,0,0]
+            best = [typemax(Float64), 0]
+            for searchtype in [0, 1, 2]
+                tres = @timed Base.SparseMatrix.getindex_I_sorted(S, I, J, searchtype)
+                res[searchtype+1] = tres[1]
+                times[searchtype+1] = tres[2]
+                if best[1] > tres[2]
+                    best[1] = tres[2]
+                    best[2] = searchtype
+                end
+            end
+
+            @printf(" %7d | %7d | %4.2e | %4.2e | %4.2e | %s\n", int(nnz(S)/S.n), length(I), times[1], times[2], times[3],
+                        (0 == best[2]) ? "binary S" : (1 == best[2]) ? "binary I" : "linear")
+            @assert res[1] == res[2] == res[3]
+        end
+    end
+end

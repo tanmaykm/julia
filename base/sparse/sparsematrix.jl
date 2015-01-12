@@ -1011,32 +1011,41 @@ function getindex_I_sorted{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, 
 end
 
 function getindex_I_sorted_binary_A{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, J::AbstractVector)
-    nI = length(I)
-    nJ = length(J)
+    const nI = length(I)
+    const nJ = length(J)
 
     colptrA = A.colptr; rowvalA = A.rowval; nzvalA = A.nzval
     colptrS = Array(Ti, nJ+1)
     colptrS[1] = 1
 
     ptrS   = 1
+    #sz = nI * nJ
+    #rowvalS = Array(Ti, sz)
+    #nzvalS  = Array(Tv, sz)
+    rowvalS = Array(Ti, 0)
+    nzvalS  = Array(Tv, 0)
     # determine result size
     @inbounds for j = 1:nJ
         col = J[j]
         ptrI::Int = 1 # runs through I
-        startA::Int = colptrA[col]
+        ptrA::Int = colptrA[col]
         stopA::Int = colptrA[col+1]-1
         while ptrI <= nI
             rowI = I[ptrI]
-            ptrA = searchsortedfirst(rowvalA, rowI, startA, stopA, Base.Order.Forward)
+            ptrA = searchsortedfirst(rowvalA, rowI, ptrA, stopA, Base.Order.Forward)
             (ptrA <= stopA) || break
             if rowvalA[ptrA] == rowI
+                push!(rowvalS, ptrI)
+                push!(nzvalS, nzvalA[ptrA])
+                #rowvalS[ptrS] = ptrI
+                #nzvalS[ptrS] = nzvalA[ptrA]
                 ptrS += 1
             end
             ptrI += 1
         end
         colptrS[j+1] = ptrS
     end
-
+#=
     rowvalS = Array(Ti, ptrS-1)
     nzvalS  = Array(Tv, ptrS-1)
 
@@ -1058,13 +1067,15 @@ function getindex_I_sorted_binary_A{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::Abstrac
             end
             ptrI += 1
         end
-    end
+    end =#
+    #resize!(rowvalS, ptrS-1)
+    #resize!(nzvalS, ptrS-1)
     return SparseMatrixCSC(nI, nJ, colptrS, rowvalS, nzvalS)
 end
 
 function getindex_I_sorted_linear{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, J::AbstractVector)
-    nI = length(I)
-    nJ = length(J)
+    const nI = length(I)
+    const nJ = length(J)
 
     colptrA = A.colptr; rowvalA = A.rowval; nzvalA = A.nzval
     colptrS = Array(Ti, nJ+1)
@@ -1123,8 +1134,8 @@ function getindex_I_sorted_linear{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractV
 end
 
 function getindex_I_sorted_binary_I{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, J::AbstractVector)
-    nI = length(I)
-    nJ = length(J)
+    const nI = length(I)
+    const nJ = length(J)
 
     colptrA = A.colptr; rowvalA = A.rowval; nzvalA = A.nzval
     colptrS = Array(Ti, nJ+1)

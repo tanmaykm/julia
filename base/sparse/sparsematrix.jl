@@ -1030,13 +1030,14 @@ function getindex_I_sorted_binary_A{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::Abstrac
         stopA::Int = colptrA[col+1]-1
         while ptrI <= nI
             rowI = I[ptrI]
+            ptrI += 1
+            (rowvalA[ptrA] > rowI) && continue
             ptrA = searchsortedfirst(rowvalA, rowI, ptrA, stopA, Base.Order.Forward)
             (ptrA <= stopA) || break
             if rowvalA[ptrA] == rowI
                 #cacheA[rowI-offI] = true
                 ptrS += 1
             end
-            ptrI += 1
         end
         colptrS[j+1] = ptrS
     end
@@ -1053,7 +1054,7 @@ function getindex_I_sorted_binary_A{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::Abstrac
         stopA::Int = colptrA[col+1]-1
         while ptrI <= nI
             rowI = I[ptrI]
-            #if cacheA[rowI-offI]
+            if rowvalA[ptrA] <= rowI
                 ptrA = searchsortedfirst(rowvalA, rowI, ptrA, stopA, Base.Order.Forward)
                 (ptrA <= stopA) || break
                 if rowvalA[ptrA] == rowI
@@ -1061,7 +1062,7 @@ function getindex_I_sorted_binary_A{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::Abstrac
                     nzvalS[ptrS] = nzvalA[ptrA]
                     ptrS += 1
                 end
-            #end
+            end
             ptrI += 1
         end
     end
@@ -1146,13 +1147,14 @@ function getindex_I_sorted_binary_I{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::Abstrac
         stopA::Int = colptrA[col+1]
         while ptrA < stopA
             rowA = rowvalA[ptrA]
+            ptrA += 1
+            (I[ptrI] > rowA) && continue
             cached_pos = cacheI[rowA]
             ptrI = (cached_pos == 0) ? (cacheI[rowA] = searchsortedfirst(I, rowA, ptrI, nI, Base.Order.Forward)) : cached_pos
             (ptrI > nI) && break
             if I[ptrI] == rowA
                 ptrS += 1
             end
-            ptrA += 1
         end
         colptrS[j+1] = ptrS
     end
@@ -1170,7 +1172,7 @@ function getindex_I_sorted_binary_I{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::Abstrac
             rowA = rowvalA[ptrA]
             ptrI = cacheI[rowA]
             (ptrI > nI) && break
-            if I[ptrI] == rowA
+            if (ptrI > 0) && (I[ptrI] == rowA)
                 rowvalS[ptrS] = ptrI
                 nzvalS[ptrS] = nzvalA[ptrA]
                 ptrS += 1

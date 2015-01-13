@@ -1113,30 +1113,62 @@ function getindex_I_sorted_binary_I{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::Abstrac
     colptrS = Array(Ti, nJ+1)
     colptrS[1] = 1
 
-    cacheI = zeros(Int, A.m)
-    ptrS   = 1
-    # build the cache and determine result size
+    m = A.m
+    cacheI = zeros(Int, m)
+    # count rows
     @inbounds for j = 1:nJ
         col = J[j]
-        ptrI::Int = 1 # runs through I
-        ptrA::Int = colptrA[col]
-        stopA::Int = colptrA[col+1]
-        while ptrA < stopA
-            rowA = rowvalA[ptrA]
-            ptrA += 1
-            (I[ptrI] > rowA) && continue
-            cached_pos = cacheI[rowA]
-            ptrI = (cached_pos == 0) ? (cacheI[rowA] = searchsortedfirst(I, rowA, ptrI, nI, Base.Order.Forward)) : cached_pos
-            (ptrI > nI) && break
-            if I[ptrI] == rowA
-                ptrS += 1
-            end
+        @simd for ptrA in colptrA[col]:(colptrA[col+1]-1)
+            cacheI[rowvalA[ptrA]] += 1
         end
-        colptrS[j+1] = ptrS
+        #ptrA::Int = colptrA[col]
+        #stopA::Int = colptrA[col+1]
+        #while ptrA < stopA
+        #    cacheI[rowvalA[ptrA]] += 1
+        #    ptrA += 1
+        #end
     end
 
-    rowvalS = Array(Ti, ptrS-1)
-    nzvalS  = Array(Tv, ptrS-1)
+    # fill cache and count nnz
+    ptrS::Int = 0
+    ptrI::Int = 1
+    @inbounds for j in 1:m
+        cval = cacheI[j]
+        (cval == 0) && continue
+        ptrI = searchsortedfirst(I, j, ptrI, nI, Base.Order.Forward)
+        if ptrI > nI
+            cacheI[j:m] = 0
+            break
+        end
+        ptrS += cval
+        cacheI[j] = ptrI
+    end
+    rowvalS = Array(Ti, ptrS)
+    nzvalS  = Array(Tv, ptrS)
+
+    #ptrS   = 1
+    ## build the cache and determine result size
+    #@inbounds for j = 1:nJ
+    #    col = J[j]
+    #    ptrI::Int = 1 # runs through I
+    #    ptrA::Int = colptrA[col]
+    #    stopA::Int = colptrA[col+1]
+    #    while ptrA < stopA
+    #        rowA = rowvalA[ptrA]
+    #        ptrA += 1
+    #        (I[ptrI] > rowA) && continue
+    #        cached_pos = cacheI[rowA]
+    #        ptrI = (cached_pos == 0) ? (cacheI[rowA] = searchsortedfirst(I, rowA, ptrI, nI, Base.Order.Forward)) : cached_pos
+    #        (ptrI > nI) && break
+    #        if I[ptrI] == rowA
+    #            ptrS += 1
+    #        end
+    #    end
+    #    colptrS[j+1] = ptrS
+    #end
+
+    #rowvalS = Array(Ti, ptrS-1)
+    #nzvalS  = Array(Tv, ptrS-1)
 
     # fill the values
     ptrS = 1
@@ -1155,6 +1187,7 @@ function getindex_I_sorted_binary_I{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::Abstrac
             end
             ptrA += 1
         end
+        colptrS[j+1] = ptrS
     end
     return SparseMatrixCSC(nI, nJ, colptrS, rowvalS, nzvalS)
 end

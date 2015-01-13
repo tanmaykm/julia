@@ -969,45 +969,21 @@ function getindex{Tv,Ti<:Integer}(A::SparseMatrixCSC{Tv,Ti}, I::Range, J::Abstra
     return SparseMatrixCSC(nI, nJ, colptrS, rowvalS, nzvalS)
 end
 
-@inline function fillrows_binary_A{Tv,Ti}(colptrA::Vector{Ti}, rowvalA::Vector{Ti}, nzvalA::Vector{Tv}, I::AbstractVector, nI::Int, col::Int, ptrS::Int,
-                                  fill::Bool=false, rowvalS::Vector{Ti}=rowvalA, nzvalS::Vector{Tv}=nzvalA)
-    ptrI::Int = 1 # runs through I
-    startA::Int = colptrA[col]
-    stopA::Int = colptrA[col+1]
-    @boundscheck(!fill, while ptrI <= nI
-        rowI = I[ptrI]
-        ptrA = spsearchsortedfirst(rowvalA, rowI, startA, stopA)
-        (ptrA < stopA) || break
-        if rowvalA[ptrA] == rowI
-            if fill
-                rowvalS[ptrS] = ptrI
-                nzvalS[ptrS] = nzvalA[ptrA]
-            end
-            ptrS += 1
-        end
-        ptrI += 1
-    end)
-    ptrS
-end
-
-function getindex_I_sorted{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, J::AbstractVector, searchtype::Int=-1)
+function getindex_I_sorted{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, J::AbstractVector)
     # Sorted vectors for indexing rows.
     # Similar to getindex_general but without the transpose trick.
     (m, n) = size(A)
     minj, maxj = extrema(J)
     ((I[1] < 1) || (I[end] > m) || (minj < 1) || (maxj > n)) && BoundsError()
 
-    if searchtype < 0
-        searchtype = 2
-    end
+    nI = length(I)
+    # heuristics based on experiments
+    alg = ((nI - m) > 2^10) ? 1 :
+          ((m - nI) > 2^10) ? 0 : 2
 
-    if searchtype < 1
-        return getindex_I_sorted_binary_A(A, I, J)
-    elseif searchtype < 2
-        return getindex_I_sorted_binary_I(A, I, J)
-    else
-        return getindex_I_sorted_linear(A, I, J)
-    end
+    (alg == 0) ? getindex_I_sorted_binary_A(A, I, J) :
+    (alg == 1) ? getindex_I_sorted_binary_I(A, I, J) :
+    getindex_I_sorted_linear(A, I, J)
 end
 
 function getindex_I_sorted_binary_A{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, J::AbstractVector)

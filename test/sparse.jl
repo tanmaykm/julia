@@ -500,6 +500,18 @@ a = speye(3,5)
 @test size(rotr90(a)) == (5,3)
 @test size(rotl90(a)) == (5,3)
 
+function test_getindex_algs{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, J::AbstractVector, alg::Int)
+    # Sorted vectors for indexing rows.
+    # Similar to getindex_general but without the transpose trick.
+    (m, n) = size(A)
+    minj, maxj = extrema(J)
+    ((I[1] < 1) || (I[end] > m) || (minj < 1) || (maxj > n)) && BoundsError()
+
+    (alg == 0) ? Base.SparseMatrix.getindex_I_sorted_binary_A(A, I, J) :
+    (alg == 1) ? Base.SparseMatrix.getindex_I_sorted_binary_I(A, I, J) :
+    Base.SparseMatrix.getindex_I_sorted_linear(A, I, J)
+end
+
 let M=2^16, N=2^8
     Irand = randperm(M);
     Jrand = randperm(N);
@@ -509,14 +521,14 @@ let M=2^16, N=2^8
     println("I sizes: $([length(I) for I in IA])");
 
     J = Jrand;
-    @printf("    S    |    I    | binary S | binary I | linear | best\n")
+    @printf("    S    |    I    | binary S | binary I |  linear  | best\n")
     for I in IA
         for S in SA
             res = Any[1,2,3]
             times = Float64[0,0,0]
             best = [typemax(Float64), 0]
             for searchtype in [0, 1, 2]
-                tres = @timed Base.SparseMatrix.getindex_I_sorted(S, I, J, searchtype)
+                tres = @timed test_getindex_algs(S, I, J, searchtype)
                 res[searchtype+1] = tres[1]
                 times[searchtype+1] = tres[2]
                 if best[1] > tres[2]

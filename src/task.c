@@ -1078,6 +1078,7 @@ JL_DLLEXPORT jl_task_t *jl_new_task(jl_function_t *start, jl_value_t *completion
     t->next = jl_nothing;
     t->queue = jl_nothing;
     t->tls = jl_nothing;
+    t->ctxvars = ct->ctxvars;
     jl_atomic_store_relaxed(&t->_state, JL_TASK_STATE_RUNNABLE);
     t->start = start;
     t->result = jl_nothing;
@@ -1669,6 +1670,7 @@ jl_task_t *jl_init_root_task(jl_ptls_t ptls, void *stack_lo, void *stack_hi)
     ct->started = 1;
     ct->next = jl_nothing;
     ct->queue = jl_nothing;
+    ct->ctxvars = jl_nothing;
     ct->tls = jl_nothing;
     jl_atomic_store_relaxed(&ct->_state, JL_TASK_STATE_RUNNABLE);
     ct->start = NULL;

@@ -80,12 +80,12 @@ function run_work_thunk(rv::RemoteValue, thunk)
     nothing
 end
 
-function schedule_call(rid, thunk)
+function schedule_call(rid, thunk, ctxvars)
     return lock(client_refs) do
         rv = RemoteValue(def_rv_channel())
         (PGRP::ProcessGroup).refs[rid] = rv
         push!(rv.clientset, rid.whence)
-        errormonitor(@async run_work_thunk(rv, thunk))
+        errormonitor(@async run_work_thunk_in_ctx(rv, thunk, ctxvars))
         return rv
     end
 end
@@ -278,11 +278,11 @@ function process_hdr(s, validate_cookie)
 end
 
 function handle_msg(msg::CallMsg{:call}, header, r_stream, w_stream, version)
-    schedule_call(header.response_oid, ()->invokelatest(msg.f, msg.args...; msg.kwargs...))
+    schedule_call(header.response_oid, ()->invokelatest(msg.f, msg.args...; msg.kwargs...), msg.ctxvars)
 end
 function handle_msg(msg::CallMsg{:call_fetch}, header, r_stream, w_stream, version)
     errormonitor(@async begin
-        v = run_work_thunk(()->invokelatest(msg.f, msg.args...; msg.kwargs...), false)
+        v = run_work_thunk_in_ctx(()->invokelatest(msg.f, msg.args...; msg.kwargs...), false, msg.ctxvars)
         if isa(v, SyncTake)
             try
                 deliver_result(w_stream, :call_fetch, header.notify_oid, v.v)
@@ -298,14 +298,14 @@ end
 
 function handle_msg(msg::CallWaitMsg, header, r_stream, w_stream, version)
     errormonitor(@async begin
-        rv = schedule_call(header.response_oid, ()->invokelatest(msg.f, msg.args...; msg.kwargs...))
+        rv = schedule_call(header.response_oid, ()->invokelatest(msg.f, msg.args...; msg.kwargs...), msg.ctxvars)
         deliver_result(w_stream, :call_wait, header.notify_oid, fetch(rv.c))
         nothing
     end)
 end
 
 function handle_msg(msg::RemoteDoMsg, header, r_stream, w_stream, version)
-    errormonitor(@async run_work_thunk(()->invokelatest(msg.f, msg.args...; msg.kwargs...), true))
+    errormonitor(@async run_work_thunk_in_ctx(()->invokelatest(msg.f, msg.args...; msg.kwargs...), true, msg.ctxvars))
 end
 
 function handle_msg(msg::ResultMsg, header, r_stream, w_stream, version)

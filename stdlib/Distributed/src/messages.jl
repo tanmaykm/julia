@@ -27,16 +27,19 @@ struct CallMsg{Mode} <: AbstractMsg
     f::Any
     args::Tuple
     kwargs
+    ctxvars
 end
 struct CallWaitMsg <: AbstractMsg
     f::Any
     args::Tuple
     kwargs
+    ctxvars
 end
 struct RemoteDoMsg <: AbstractMsg
     f::Any
     args::Tuple
     kwargs
+    ctxvars
 end
 struct ResultMsg <: AbstractMsg
     value::Any

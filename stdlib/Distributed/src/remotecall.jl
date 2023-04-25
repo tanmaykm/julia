@@ -427,13 +427,15 @@ end
 
 function remotecall(f, w::LocalProcess, args...; kwargs...)
     rr = Future(w)
-    schedule_call(remoteref_id(rr), local_remotecall_thunk(f, args, kwargs))
+    ctxvars = get_context_vars()
+    schedule_call(remoteref_id(rr), local_remotecall_thunk(f, args, kwargs), ctxvars)
     return rr
 end
 
 function remotecall(f, w::Worker, args...; kwargs...)
     rr = Future(w)
-    send_msg(w, MsgHeader(remoteref_id(rr)), CallMsg{:call}(f, args, kwargs))
+    ctxvars = get_context_vars()
+    send_msg(w, MsgHeader(remoteref_id(rr)), CallMsg{:call}(f, args, kwargs, ctxvars))
     return rr
 end
 
@@ -447,7 +449,7 @@ Keyword arguments, if any, are passed through to `f`.
 remotecall(f, id::Integer, args...; kwargs...) = remotecall(f, worker_from_id(id), args...; kwargs...)
 
 function remotecall_fetch(f, w::LocalProcess, args...; kwargs...)
-    v=run_work_thunk(local_remotecall_thunk(f,args, kwargs), false)
+    v=run_work_thunk_in_ctx(local_remotecall_thunk(f,args, kwargs), false, nothing)
     return isa(v, RemoteException) ? throw(v) : v
 end
 
@@ -457,7 +459,8 @@ function remotecall_fetch(f, w::Worker, args...; kwargs...)
     oid = RRID()
     rv = lookup_ref(oid)
     rv.waitingfor = w.id
-    send_msg(w, MsgHeader(RRID(0,0), oid), CallMsg{:call_fetch}(f, args, kwargs))
+    ctxvars = get_context_vars()
+    send_msg(w, MsgHeader(RRID(0,0), oid), CallMsg{:call_fetch}(f, args, kwargs, ctxvars))
     v = take!(rv)
     lock(client_refs) do
         delete!(PGRP.refs, oid)
@@ -499,7 +502,8 @@ function remotecall_wait(f, w::Worker, args...; kwargs...)
     rv = lookup_ref(prid)
     rv.waitingfor = w.id
     rr = Future(w)
-    send_msg(w, MsgHeader(remoteref_id(rr), prid), CallWaitMsg(f, args, kwargs))
+    ctxvars = get_context_vars()
+    send_msg(w, MsgHeader(remoteref_id(rr), prid), CallWaitMsg(f, args, kwargs, ctxvars))
     v = fetch(rv.c)
     lock(client_refs) do
         delete!(PGRP.refs, prid)
@@ -529,7 +533,8 @@ function remote_do(f, w::LocalProcess, args...; kwargs...)
 end
 
 function remote_do(f, w::Worker, args...; kwargs...)
-    send_msg(w, MsgHeader(), RemoteDoMsg(f, args, kwargs))
+    ctxvars = get_context_vars()
+    send_msg(w, MsgHeader(), RemoteDoMsg(f, args, kwargs, ctxvars))
     nothing
 end
 

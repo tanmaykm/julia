@@ -108,6 +108,7 @@ include("workerpool.jl")
 include("pmap.jl")
 include("managers.jl")    # LocalManager and SSHManager
 include("precompile.jl")
+include("ctxvars.jl")
 
 function __init__()
     init_parallel()
